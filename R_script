@@ -1,0 +1,143 @@
+# ----------------------------------------------------------------------------------
+# Title: Machine Learning Ensemble Workflow for Biodiversity and Ecological Metrics
+# Author: Vinicius Marcilio-Silva
+# Contact: viniciuschms@gmail.com
+# Date: October 2024
+# ----------------------------------------------------------------------------------
+# Description: This script provides a generalized workflow for fitting models and 
+# predicting biodiversity metrics based on environmental predictors. Developed as 
+# supplemental material for the paper "Integrating remote sensing and field inventories
+# to understand determinants of urban forest diversity and structure" and based on code from 
+# Thiago Sanna F. Silva (tsfsilva@rc.unesp.br)
+# available at https://datadryad.org/stash/dataset/doi:10.5061/dryad.6m905qfzp
+# ----------------------------------------------------------------------------------
+
+# Load required libraries
+require(caret)
+require(tools)
+require(tidyr)
+require(corrplot)
+require(nnet)
+require(caTools)
+require(caretEnsemble)
+require(ggplot2)
+require(MASS)
+require(pls)
+require(mboost)
+
+# ----------------------------------------------------------------------------------
+# Set Parameters
+# ----------------------------------------------------------------------------------
+
+# Define predictor and response variable names
+response.names <- c("Metric1", "Metric2", "Metric3")  # Update with your response variable names
+predictor.names <- c("var1", "var2", "var3", "var4")  # Update with your predictor variable names
+
+# Data placeholders (replace with actual data frames)
+data.df <- data.frame()     # Full dataset containing response and predictor variables
+future.df <- data.frame()   # Future projection data with predictors only
+
+# ----------------------------------------------------------------------------------
+# Define Functions
+# ----------------------------------------------------------------------------------
+
+# Data Preprocessing Function
+preprocess_data <- function(df, predictors) {
+  preproc <- preProcess(df[, predictors], method = c("scale", "center"))
+  df[, predictors] <- predict(preproc, df[, predictors])
+  return(df)
+}
+
+# Model Evaluation Function
+evaluate_model <- function(test.df, predictions, metric = "RMSE") {
+  eval.df <- data.frame(obs = test.df, pred = predictions)
+  return(defaultSummary(eval.df))
+}
+
+# Save Results Function
+save_results <- function(results, filename) {
+  write.csv(results, filename, row.names = FALSE)
+}
+
+# ----------------------------------------------------------------------------------
+# Preprocess Data
+# ----------------------------------------------------------------------------------
+data.df <- preprocess_data(data.df, predictor.names)
+future.df <- preprocess_data(future.df, predictor.names)
+
+# ----------------------------------------------------------------------------------
+# Main Modeling Loop for Each Response Variable
+# ----------------------------------------------------------------------------------
+
+for (response in response.names) {
+  
+  # Split data into training and testing sets (75/25 split)
+  set.seed(1985)
+  train.indices <- createDataPartition(data.df[[response]], p = 0.75, list = FALSE)
+  train.df <- data.df[train.indices, ]
+  test.df <- data.df[-train.indices, ]
+  
+  # Exploratory Scatter Plot for Predictors vs. Response
+  plot.df <- gather(data.df[, c(response, predictor.names)], key = "predictor", value = "value")
+  fig <- ggplot(plot.df, aes(value, get(response))) + geom_point() + facet_wrap(~ predictor)
+  ggsave(filename = paste0("scatter_plot_", response, ".pdf"), plot = fig)
+  
+  # Define Model Formula
+  model.formula <- as.formula(paste(response, "~", paste(predictor.names, collapse = " + ")))
+  
+  # Define Cross-Validation Control
+  fit.control <- trainControl(method = "repeatedcv", number = 10, repeats = 3, savePredictions = "final")
+  
+  # Define Candidate Models for Ensemble
+  tuneList <- list(
+    pls=caretModelSpec(method="pls", linout = TRUE,importance=T),
+    lm=caretModelSpec(method="lm", linout = TRUE,importance=T),
+    rf=caretModelSpec(method="rf",importance=T),
+    nnet=caretModelSpec(method="nnet", linout = TRUE,importance=T),
+    rvmRadial=caretModelSpec(method="rvmRadial", linout = TRUE,importance=T),
+    svmRadialSigma=caretModelSpec(method="svmRadialSigma", linout = TRUE,importance=T),
+    svmRadial=caretModelSpec(method="svmRadial", linout = TRUE,importance=T),
+    glm=caretModelSpec(method="glm"),
+    bayglm=caretModelSpec(method="bayesglm"),
+    glmboost=caretModelSpec(method="glmboost"),
+    parRF =caretModelSpec( method = 'parRF',importance=T)#,
+  )
+  
+  # Train Ensemble of Models
+  models <- caretList(model.formula, data = train.df, trControl = fit.control, tuneList = tuneList)
+  model.res <- resamples(models)
+  
+  # Save Model Summary
+  model.summary <- as.data.frame(summary(model.res)[3])
+  save_results(model.summary, paste0("model_summary_", response, ".csv"))
+  
+  # Train Stacked Ensemble Model
+  stackControl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, savePredictions = "final")
+  stack.glm <- caretEnsemble(models, metric = "RMSE", trControl = stackControl)
+  
+  # Predict on Test Data and Evaluate
+  model_preds <- lapply(models, predict, newdata = test.df)
+  model_preds <- data.frame(model_preds)
+  model_preds$ensemble <- predict(stack.glm, newdata = test.df)
+  test.eval <- evaluate_model(test.df[[response]], model_preds$ensemble)
+  save_results(test.eval, paste0("evaluation_RMSE_", response, ".csv"))
+  
+  # Variable Importance from Ensemble Model
+  var.imp <- varImp(stack.glm)
+  save_results(var.imp, paste0("variable_importance_", response, ".csv"))
+  
+  # Predict Future Data if Available
+  if (nrow(future.df) > 0) {
+    future.pred <- predict(stack.glm, newdata = future.df)
+    save_results(future.pred, paste0("future_predictions_", response, ".csv"))
+  }
+}
+
+# ----------------------------------------------------------------------------------
+# End of Script
+# ----------------------------------------------------------------------------------
+# Notes:
+# - This script uses modular functions for data preprocessing, evaluation, and saving results.
+# - Update `response.names` and `predictor.names` with relevant variable names.
+# - Ensure `data.df` and `future.df` are properly defined before running the script.
+# ----------------------------------------------------------------------------------
