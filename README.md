@@ -1,7 +1,8 @@
-#Title: Machine Learning Model Ensemble Fitting and Prediction Workflow for Biodiversity Analysis
-Author: Vinicius Marcilio-Silva Contact: viniciuschms@gmail.com Date: October 2024
-
-----------------------------------------------------------------------------
+# Title: Machine Learning Model Ensemble Fitting and Prediction Workflow for Biodiversity Analysis
+# Author: Vinicius Marcilio-Silva
+Contact: viniciuschms@gmail.com
+Date: October 2024
+# ----------------------------------------------------------------------------
 Description: This script provides a generalized workflow for fitting models and predicting biodiversity
 metrics based on environmental predictors. Developed as supplemental material for the paper
 "Integrating remote sensing and field inventories to understand determinants of urban forest diversity and structure"
