@@ -1,5 +1,7 @@
 # Title: Machine Learning Model Ensemble Fitting and Prediction Workflow for Biodiversity Analysis
 # Author: Vinicius Marcilio-Silva
+![image](https://github.com/user-attachments/assets/cc9a0de8-dcd9-492f-b430-968e959b47d3)
+
 Contact: viniciuschms@gmail.com
 Date: October 2024
 # ----------------------------------------------------------------------------
